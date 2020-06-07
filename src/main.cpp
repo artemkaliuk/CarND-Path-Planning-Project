@@ -7,6 +7,7 @@
 #include "Eigen-3.3/Eigen/QR"
 #include "helpers.h"
 #include "json.hpp"
+#include "spline.h"
 
 // for convenience
 using nlohmann::json;
@@ -90,29 +91,129 @@ int main() {
 
           json msgJson;
 
-          vector<double> next_x_vals;
-          vector<double> next_y_vals;
+
 
           /**
            * TODO: define a path made up of (x,y) points that the car will visit
            *   sequentially every .02 seconds
            */
+          int prev_size = previous_path_x.size();
+          vector<double> anchor_x;
+          vector<double> anchor_y;
+          double ref_x = car_x;
+          double ref_y = car_y;
+          double ref_yaw = deg2rad(car_yaw);
+          double max_vel = 49.5;
           int lane = 1;
           int lane_width = 4;
-          int anchor_spacing = 30;
+          double anchor_spacing = 30.0;
           double dist_inc = 0.3; // spacing between the waypoints
-          for(int i = 0; i < 50; i++){
-        	  double next_s = car_s + (i + 1) * dist_inc; // longitudinal distance to the next waypoint in Frenet coordinates
-              double next_d = lane_width/2 + lane_width * lane; // lateral offset of the centerline of the ego lane in Frenet coordinates
-              vector<double> xy = getXY(next_s, next_d, map_waypoints_s, map_waypoints_x, map_waypoints_y); // Transform the Frenet coordinates into the Cartesian coordinate system
-              next_x_vals.push_back(xy[0]);
-              next_y_vals.push_back(xy[1]);
+
+          // if the size of the previous path is too small, use the current position of the car and project it one step to the past based on the current orientation
+          if (prev_size < 2){
+        	  double prev_car_x = car_x - cos(car_yaw);
+        	  double prev_car_y = car_y - sin(car_yaw);
+
+        	  anchor_x.push_back(prev_car_x);
+        	  anchor_x.push_back(car_x);
+
+        	  anchor_y.push_back(prev_car_y);
+        	  anchor_y.push_back(car_y);
           }
 
-          //double next_waypoint0 = anchor_spacing
+          // if the previous path has enough points, use the previous two points
+          else{
 
-          msgJson["next_x"] = next_x_vals;
-          msgJson["next_y"] = next_y_vals;
+        	  ref_x = previous_path_x[prev_size - 1];
+        	  ref_y = previous_path_y[prev_size - 1];
+
+        	  double refpoint_x_2 = previous_path_x[prev_size - 2];
+        	  double refpoint_y_2 = previous_path_y[prev_size - 2];
+        	  ref_yaw = atan2(ref_y - refpoint_y_2, ref_x - refpoint_x_2);
+
+        	  anchor_x.push_back(refpoint_x_2);
+        	  anchor_x.push_back(ref_x);
+
+        	  anchor_y.push_back(refpoint_y_2);
+        	  anchor_y.push_back(ref_y);
+          }
+
+          // Define anchor points in front of the vehicle in Cartesian coordinate system for further spline estimation
+          vector<double> xy_preview_anchor1 = getXY(car_s + 1 * anchor_spacing, lane_width/2 + lane_width * lane, map_waypoints_s, map_waypoints_x, map_waypoints_y);
+          vector<double> xy_preview_anchor2 = getXY(car_s + 2 * anchor_spacing, lane_width/2 + lane_width * lane, map_waypoints_s, map_waypoints_x, map_waypoints_y);
+          vector<double> xy_preview_anchor3 = getXY(car_s + 3 * anchor_spacing, lane_width/2 + lane_width * lane, map_waypoints_s, map_waypoints_x, map_waypoints_y);
+          anchor_x.push_back(xy_preview_anchor1[0]);
+          anchor_x.push_back(xy_preview_anchor2[0]);
+          anchor_x.push_back(xy_preview_anchor3[0]);
+
+          anchor_y.push_back(xy_preview_anchor1[1]);
+          anchor_y.push_back(xy_preview_anchor2[1]);
+          anchor_y.push_back(xy_preview_anchor3[1]);
+
+          for (int i = 0; i < anchor_x.size(); i++){
+
+        	  // transform the car reference angle to the ego car coordinate system (reference angle will be 0 degrees then)
+        	  double shift_x = anchor_x[i] - ref_x;
+        	  double shift_y = anchor_y[i] - ref_y;
+
+        	  anchor_x[i] = (shift_x * cos(0 - ref_yaw) - shift_y * sin(0 - ref_yaw));
+        	  anchor_y[i] = (shift_x * sin(0 - ref_yaw) + shift_y * cos(0 - ref_yaw));
+        	  std::cout<< "Anchor X: " << anchor_x[i] << std::endl;
+        	  std::cout<< "Anchor Y: " << anchor_y[i] << std::endl;
+          }
+
+          std::cout<< "before the spline"<< std::endl;
+          tk::spline s;
+
+          s.set_points(anchor_x, anchor_y);
+
+
+          vector<double> interpolated_points_x;
+          vector<double> interpolated_points_y;
+
+          for (int i = 0; i < previous_path_x.size(); i++){
+        	  interpolated_points_x.push_back(previous_path_x[i]);
+        	  interpolated_points_y.push_back(previous_path_y[i]);
+          }
+
+          double target_x = 30.0;
+          double target_y = s(target_x);
+          //std::cout << "target y: " << target_y << std::endl;
+          double target_dist = sqrt(target_x * target_x + target_y * target_y);
+
+          double x_add_on = 0;
+
+          for (int i = 1; i <= 50 - previous_path_x.size(); i++){
+        	  double N = (target_dist / (0.02 * max_vel/2.24));
+        	  double x_point = x_add_on + target_x/N;
+        	  //std::cout << i << std::endl;
+        	  //std::cout << "X: " << x_point << std::endl;
+        	  double y_point = s(x_point);
+        	  //std::cout << "Y: " << y_point << std::endl;
+        	  x_add_on = x_point;
+
+        	  double x_ref = x_point;
+        	  double y_ref = y_point;
+
+        	  // Rotating back
+        	  x_point = (x_ref * cos(ref_yaw) - y_ref * sin(ref_yaw));
+        	  y_point = (x_ref * sin(ref_yaw) + y_ref * cos(ref_yaw));
+
+        	  x_point += ref_x;
+        	  y_point += ref_y;
+
+        	  interpolated_points_x.push_back(x_point);
+        	  interpolated_points_y.push_back(y_point);
+          }
+
+          /*for (int i = 0; i < interpolated_points_x.size(); i++){
+        	  std::cout << "Interpolated points X: " << interpolated_points_x[i] << std::endl;
+        	  std::cout << "Interpolated points Y: " << interpolated_points_y[i] << std::endl;
+          }
+          */
+          msgJson["next_x"] = interpolated_points_x;
+          msgJson["next_y"] = interpolated_points_y;
+
 
           auto msg = "42[\"control\","+ msgJson.dump()+"]";
 
