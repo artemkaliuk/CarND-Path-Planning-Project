@@ -1,6 +1,15 @@
 #ifndef HELPERS_H
 #define HELPERS_H
-
+/*
+#define TTC 2.0
+#define LANE_WIDTH 4.0
+#define LEFT_LANE_LEFT_LINE 0.0
+#define LEFT_LANE_RIGHT_LINE (LEFT_LANE_LEFT_LINE + LANE_WIDTH)
+#define MID_LANE_RIGHT_LINE (LEFT_LANE_RIGHT_LINE + LANE_WIDTH)
+#define RIGHT_LANE_RIGHT_LINE (LEFT_LANE_RIGHT_LINE + LANE_WIDTH)
+#define MAX_SPEED 49.7
+#define ANCHOR_SPACING 30.0
+*/
 #include <math.h>
 #include <string>
 #include <vector>
