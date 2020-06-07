@@ -109,6 +109,42 @@ int main() {
           double anchor_spacing = 30.0;
           double dist_inc = 0.3; // spacing between the waypoints
 
+
+          // Avoid collisions
+          // 1. Iterate through all the cars and check if they are in our lane
+          // 2. For the cars in our lane: check for the time gap - if the time gap is smaller than expected, adapt the target speed
+          // 3. Feed the target speed in to the waypoint generator
+
+          std::cout<< sensor_fusion.size() << std::endl;
+          int idx = 99;
+          double distance2collision = 9999.9;
+          for (int i = 0; i < sensor_fusion.size(); i++){
+        	  // Check for all the objects within the ego lane
+        	  if ((sensor_fusion[i][6] >= lane_width * lane) && (sensor_fusion[i][6] <= (i + 1) * lane_width)){
+        		  double target_vx = sensor_fusion[i][3];
+        		  double target_vy = sensor_fusion[i][4];
+        		  double target_s = sensor_fusion[i][5];
+        		  double delta_s = target_s - end_path_s;
+        		  if ((distance2collision > delta_s) && (delta_s > 0)){
+        			  idx = i;
+        			  distance2collision = delta_s;
+        		  }
+        	  }
+          }
+          std::cout<< "Distance2collision: " << distance2collision << std::endl;
+
+          if (idx != 99){
+           	  // Calculate the time to collision metric
+        	  double target_vx = sensor_fusion[idx][3];
+        	  double target_vy = sensor_fusion[idx][4];
+              double target_s = sensor_fusion[idx][5];
+        	  double target_speed = sqrt(target_vx * target_vx + target_vy * target_vy)/2.24;
+              double ttc = (target_s - end_path_s) / (car_speed / 2.24 - target_speed);
+        	  std::cout<< "TTC: " << ttc << std::endl;
+          }
+
+
+
           // if the size of the previous path is too small, use the current position of the car and project it one step to the past based on the current orientation
           if (prev_size < 2){
         	  double prev_car_x = car_x - cos(car_yaw);
@@ -158,8 +194,6 @@ int main() {
 
         	  anchor_x[i] = (shift_x * cos(0 - ref_yaw) - shift_y * sin(0 - ref_yaw));
         	  anchor_y[i] = (shift_x * sin(0 - ref_yaw) + shift_y * cos(0 - ref_yaw));
-        	  std::cout<< "Anchor X: " << anchor_x[i] << std::endl;
-        	  std::cout<< "Anchor Y: " << anchor_y[i] << std::endl;
           }
 
           std::cout<< "before the spline"<< std::endl;
@@ -186,10 +220,7 @@ int main() {
           for (int i = 1; i <= 50 - previous_path_x.size(); i++){
         	  double N = (target_dist / (0.02 * max_vel/2.24));
         	  double x_point = x_add_on + target_x/N;
-        	  //std::cout << i << std::endl;
-        	  //std::cout << "X: " << x_point << std::endl;
         	  double y_point = s(x_point);
-        	  //std::cout << "Y: " << y_point << std::endl;
         	  x_add_on = x_point;
 
         	  double x_ref = x_point;
@@ -206,11 +237,6 @@ int main() {
         	  interpolated_points_y.push_back(y_point);
           }
 
-          /*for (int i = 0; i < interpolated_points_x.size(); i++){
-        	  std::cout << "Interpolated points X: " << interpolated_points_x[i] << std::endl;
-        	  std::cout << "Interpolated points Y: " << interpolated_points_y[i] << std::endl;
-          }
-          */
           msgJson["next_x"] = interpolated_points_x;
           msgJson["next_y"] = interpolated_points_y;
 
