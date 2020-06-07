@@ -103,6 +103,7 @@ int main() {
           double ref_x = car_x;
           double ref_y = car_y;
           double ref_yaw = deg2rad(car_yaw);
+          double set_vel = 49.5;
           double max_vel = 49.5;
           int lane = 1;
           int lane_width = 4;
@@ -118,9 +119,10 @@ int main() {
           std::cout<< sensor_fusion.size() << std::endl;
           int idx = 99;
           double distance2collision = 9999.9;
+          double ttc = 99.9;
           for (int i = 0; i < sensor_fusion.size(); i++){
         	  // Check for all the objects within the ego lane
-        	  if ((sensor_fusion[i][6] >= lane_width * lane) && (sensor_fusion[i][6] <= (i + 1) * lane_width)){
+        	  if ((sensor_fusion[i][6] >= lane_width * lane) && (sensor_fusion[i][6] <= (lane + 1) * lane_width)){
         		  double target_vx = sensor_fusion[i][3];
         		  double target_vy = sensor_fusion[i][4];
         		  double target_s = sensor_fusion[i][5];
@@ -139,8 +141,17 @@ int main() {
         	  double target_vy = sensor_fusion[idx][4];
               double target_s = sensor_fusion[idx][5];
         	  double target_speed = sqrt(target_vx * target_vx + target_vy * target_vy)/2.24;
-              double ttc = (target_s - end_path_s) / (car_speed / 2.24 - target_speed);
+        	  double s_diff = target_s - end_path_s;
+              ttc = s_diff / (car_speed / 2.24 - target_speed);
         	  std::cout<< "TTC: " << ttc << std::endl;
+
+              // If TTC is too small, slow down
+              if (ttc <= 0.6){
+            	  set_vel = s_diff/ttc + target_speed;
+              }
+              else{
+            	  set_vel = max_vel;
+              }
           }
 
 
@@ -218,7 +229,7 @@ int main() {
           double x_add_on = 0;
 
           for (int i = 1; i <= 50 - previous_path_x.size(); i++){
-        	  double N = (target_dist / (0.02 * max_vel/2.24));
+        	  double N = (target_dist / (0.02 * set_vel/2.24));
         	  double x_point = x_add_on + target_x/N;
         	  double y_point = s(x_point);
         	  x_add_on = x_point;
