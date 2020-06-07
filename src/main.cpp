@@ -97,15 +97,19 @@ int main() {
            * TODO: define a path made up of (x,y) points that the car will visit
            *   sequentially every .02 seconds
            */
+          int lane = 1;
+          int lane_width = 4;
+          int anchor_spacing = 30;
           double dist_inc = 0.3; // spacing between the waypoints
           for(int i = 0; i < 50; i++){
         	  double next_s = car_s + (i + 1) * dist_inc; // longitudinal distance to the next waypoint in Frenet coordinates
-              double next_d = 6.0;
-              //double next_d = dist_d[lane]; // lateral offset of the centerline of the ego lane in Frenet coordinates
+              double next_d = lane_width/2 + lane_width * lane; // lateral offset of the centerline of the ego lane in Frenet coordinates
               vector<double> xy = getXY(next_s, next_d, map_waypoints_s, map_waypoints_x, map_waypoints_y); // Transform the Frenet coordinates into the Cartesian coordinate system
               next_x_vals.push_back(xy[0]);
               next_y_vals.push_back(xy[1]);
           }
+
+          //double next_waypoint0 = anchor_spacing
 
           msgJson["next_x"] = next_x_vals;
           msgJson["next_y"] = next_y_vals;
