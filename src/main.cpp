@@ -28,6 +28,7 @@ int main() {
   string map_file_ = "../data/highway_map.csv";
   // The max s value before wrapping around the track back to 0
   double max_s = 6945.554;
+  static double set_vel = 0;
 
   std::ifstream in_map_(map_file_.c_str(), std::ifstream::in);
 
@@ -103,7 +104,7 @@ int main() {
           double ref_x = car_x;
           double ref_y = car_y;
           double ref_yaw = deg2rad(car_yaw);
-          double set_vel = 49.5;
+
           double max_vel = 49.5;
           int lane = 1;
           int lane_width = 4;
@@ -116,7 +117,6 @@ int main() {
           // 2. For the cars in our lane: check for the time gap - if the time gap is smaller than expected, adapt the target speed
           // 3. Feed the target speed in to the waypoint generator
 
-          std::cout<< sensor_fusion.size() << std::endl;
           int idx = 99;
           double distance2collision = 9999.9;
           double ttc = 99.9;
@@ -126,10 +126,11 @@ int main() {
         		  double target_vx = sensor_fusion[i][3];
         		  double target_vy = sensor_fusion[i][4];
         		  double target_s = sensor_fusion[i][5];
-        		  double delta_s = target_s - end_path_s;
+        		  double delta_s = target_s - car_s;
         		  if ((distance2collision > delta_s) && (delta_s > 0)){
         			  idx = i;
         			  distance2collision = delta_s;
+        			  std::cout<< "Delta distance: " << delta_s << std::endl;
         		  }
         	  }
           }
@@ -141,19 +142,32 @@ int main() {
         	  double target_vy = sensor_fusion[idx][4];
               double target_s = sensor_fusion[idx][5];
         	  double target_speed = sqrt(target_vx * target_vx + target_vy * target_vy)/2.24;
+        	  // Calculate the distance between the target vehicle and the last point of the planned path
         	  double s_diff = target_s - end_path_s;
-              ttc = s_diff / (car_speed / 2.24 - target_speed);
-        	  std::cout<< "TTC: " << ttc << std::endl;
+        	  // if the target car is far away and the ego car is too slow, set the time to collision to a large value
+        	  if ((s_diff > 50) && (car_speed / 2.24 - target_speed < -5.0)){
+        		  ttc = 999.9;
+        	  }
+        	  // if the target car is close enough and speed
+        	  else{
+        		  ttc = s_diff / (car_speed / 2.24 - target_speed);
+        	  }
 
-              // If TTC is too small, slow down
-              if (ttc <= 0.6){
-            	  set_vel = s_diff/ttc + target_speed;
-              }
-              else{
-            	  set_vel = max_vel;
-              }
+        	  std::cout<< "TTC: " << ttc << std::endl;
+          }
+          // If TTC is too small, slow down
+          if (ttc <= 1.5){
+        	  set_vel += -0.3;
+        	  std::cout<< "Decrease the velocity: " << std::endl;
+          }
+          else{
+        	  if ((max_vel - set_vel > 0.0) && (set_vel < 49.5)) {
+        		  set_vel += 0.3;
+        		  std::cout<< "Increase the velocity: " << std::endl;
+        	  }
           }
 
+          std::cout<< "Set velocity: " << set_vel << std::endl;
 
 
           // if the size of the previous path is too small, use the current position of the car and project it one step to the past based on the current orientation
@@ -207,7 +221,6 @@ int main() {
         	  anchor_y[i] = (shift_x * sin(0 - ref_yaw) + shift_y * cos(0 - ref_yaw));
           }
 
-          std::cout<< "before the spline"<< std::endl;
           tk::spline s;
 
           s.set_points(anchor_x, anchor_y);
