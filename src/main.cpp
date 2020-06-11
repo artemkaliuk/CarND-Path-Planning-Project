@@ -14,6 +14,71 @@ using nlohmann::json;
 using std::string;
 using std::vector;
 
+double ttc_calculation(vector<vector<double>> sensor_fusion, int lane, int lane_width, double end_path_s, double car_s, double car_speed, bool front, bool rear){
+    // Avoid collisions
+    // 1. Iterate through all the cars and check if they are in our lane
+    // 2. For the cars in our lane: check for the time gap - if the time gap is smaller than expected, adapt the target speed
+    // 3. Feed the target speed in to the waypoint generator
+
+    int idx = 99;
+    int idx_rear = 99;
+    double distance2collision = 9999.9;
+    double ttc = 99.9;
+    for (int i = 0; i < sensor_fusion.size(); i++){
+  	  // Check for all the objects within the ego lane
+  	  if ((sensor_fusion[i][6] >= lane_width * lane) && (sensor_fusion[i][6] <= (lane + 1) * lane_width)){
+  		  double target_vx = sensor_fusion[i][3];
+  		  double target_vy = sensor_fusion[i][4];
+  		  double target_s = sensor_fusion[i][5];
+  		  double delta_s = target_s - car_s;
+  		  // Choose the object in the ego lane that is closest to the ego car
+  		  if (distance2collision > abs(delta_s)){
+  			  // Check front targets
+  			  if (front == true){
+  				  if (delta_s > 0){
+  					  idx = i;
+  					  std::cout << "Target found" << std::endl;
+  					  distance2collision = delta_s;
+  				  }
+  				else{
+  					idx = 99;
+  				}
+  			  }
+  			  // Check the rear targets
+  			  if (rear == true){
+  				 if (delta_s < 0){
+  					 idx_rear = i;
+  				 }
+  				 else{
+  					 idx_rear = 99;
+  				 }
+
+  			  }
+  		  }
+  	  }
+    }
+
+    if (idx != 99){
+     	  // Calculate the time to collision metric
+  	  double target_vx = sensor_fusion[idx][3];
+  	  double target_vy = sensor_fusion[idx][4];
+      double target_s = sensor_fusion[idx][5];
+  	  double target_speed = sqrt(target_vx * target_vx + target_vy * target_vy)/2.24;
+  	  // Calculate the distance between the target vehicle and the last point of the planned path
+  	  double s_diff = target_s - end_path_s;
+  	  std::cout << "Distance2Target" << s_diff << std::endl;
+  	  // if the target car is far away and the ego car is too slow, set the time to collision to a large value
+  	  if ((s_diff > 50) || ((car_speed / 2.24 - target_speed) < -5.0)){
+  		  ttc = 999.9;
+  	  }
+  	  else{
+  		  ttc = s_diff / (car_speed / 2.24 - target_speed);
+  	  }
+    }
+    std::cout<<"TTC: " << ttc << std::endl;
+    return ttc;
+}
+
 int main() {
   uWS::Hub h;
 
@@ -31,6 +96,7 @@ int main() {
   static double set_vel = 0;
 
   std::ifstream in_map_(map_file_.c_str(), std::ifstream::in);
+
 
   string line;
   while (getline(in_map_, line)) {
@@ -92,8 +158,6 @@ int main() {
 
           json msgJson;
 
-
-
           /**
            * TODO: define a path made up of (x,y) points that the car will visit
            *   sequentially every .02 seconds
@@ -111,63 +175,19 @@ int main() {
           double anchor_spacing = 30.0;
           double dist_inc = 0.3; // spacing between the waypoints
 
+          double ttc = ttc_calculation(sensor_fusion, lane, lane_width, end_path_s, car_s, car_speed, true, false);
 
-          // Avoid collisions
-          // 1. Iterate through all the cars and check if they are in our lane
-          // 2. For the cars in our lane: check for the time gap - if the time gap is smaller than expected, adapt the target speed
-          // 3. Feed the target speed in to the waypoint generator
-
-          int idx = 99;
-          double distance2collision = 9999.9;
-          double ttc = 99.9;
-          for (int i = 0; i < sensor_fusion.size(); i++){
-        	  // Check for all the objects within the ego lane
-        	  if ((sensor_fusion[i][6] >= lane_width * lane) && (sensor_fusion[i][6] <= (lane + 1) * lane_width)){
-        		  double target_vx = sensor_fusion[i][3];
-        		  double target_vy = sensor_fusion[i][4];
-        		  double target_s = sensor_fusion[i][5];
-        		  double delta_s = target_s - car_s;
-        		  if ((distance2collision > delta_s) && (delta_s > 0)){
-        			  idx = i;
-        			  distance2collision = delta_s;
-        			  std::cout<< "Delta distance: " << delta_s << std::endl;
-        		  }
-        	  }
-          }
-          std::cout<< "Distance2collision: " << distance2collision << std::endl;
-
-          if (idx != 99){
-           	  // Calculate the time to collision metric
-        	  double target_vx = sensor_fusion[idx][3];
-        	  double target_vy = sensor_fusion[idx][4];
-              double target_s = sensor_fusion[idx][5];
-        	  double target_speed = sqrt(target_vx * target_vx + target_vy * target_vy)/2.24;
-        	  // Calculate the distance between the target vehicle and the last point of the planned path
-        	  double s_diff = target_s - end_path_s;
-        	  // if the target car is far away and the ego car is too slow, set the time to collision to a large value
-        	  if ((s_diff > 50) && (car_speed / 2.24 - target_speed < -5.0)){
-        		  ttc = 999.9;
-        	  }
-        	  // if the target car is close enough and speed
-        	  else{
-        		  ttc = s_diff / (car_speed / 2.24 - target_speed);
-        	  }
-
-        	  std::cout<< "TTC: " << ttc << std::endl;
-          }
-          // If TTC is too small, slow down
-          if (ttc <= 1.5){
+          // If TTC is too small, check for a possible lane change - if a lane change is not possible, slow down
+          if ((ttc <= 1.5) && (ttc > 0.0)){
         	  set_vel += -0.3;
         	  std::cout<< "Decrease the velocity: " << std::endl;
+              std::cout<< "TTC: " << ttc << std::endl;
           }
           else{
         	  if ((max_vel - set_vel > 0.0) && (set_vel < 49.5)) {
         		  set_vel += 0.3;
-        		  std::cout<< "Increase the velocity: " << std::endl;
         	  }
           }
-
-          std::cout<< "Set velocity: " << set_vel << std::endl;
 
 
           // if the size of the previous path is too small, use the current position of the car and project it one step to the past based on the current orientation
