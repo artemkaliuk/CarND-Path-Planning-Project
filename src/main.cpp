@@ -65,10 +65,10 @@ double ttc_calculation(vector<vector<double>> sensor_fusion, int lane, int lane_
       double target_s = sensor_fusion[idx][5];
   	  double target_speed = sqrt(target_vx * target_vx + target_vy * target_vy)/2.24;
   	  // Calculate the distance between the target vehicle and the last point of the planned path
-  	  double s_diff = target_s - end_path_s;
+  	  double s_diff = target_s - car_s;
   	  std::cout << "Distance2Target" << s_diff << std::endl;
   	  // if the target car is far away and the ego car is too slow, set the time to collision to a large value
-  	  if ((s_diff > 50) || ((car_speed / 2.24 - target_speed) < -5.0)){
+  	  if ((s_diff > 80) || ((car_speed / 2.24 - target_speed) < -5.0)){
   		  ttc = 999.9;
   	  }
   	  else{
@@ -93,6 +93,7 @@ int main() {
   string map_file_ = "../data/highway_map.csv";
   // The max s value before wrapping around the track back to 0
   double max_s = 6945.554;
+  static int lane = 1;
   static double set_vel = 0;
 
   std::ifstream in_map_(map_file_.c_str(), std::ifstream::in);
@@ -170,18 +171,38 @@ int main() {
           double ref_yaw = deg2rad(car_yaw);
 
           double max_vel = 49.5;
-          int lane = 1;
+
           int lane_width = 4;
           double anchor_spacing = 30.0;
           double dist_inc = 0.3; // spacing between the waypoints
 
           double ttc = ttc_calculation(sensor_fusion, lane, lane_width, end_path_s, car_s, car_speed, true, false);
+          double ttc_left = -999.9;
+          double ttc_right = -999.9;
 
           // If TTC is too small, check for a possible lane change - if a lane change is not possible, slow down
-          if ((ttc <= 1.5) && (ttc > 0.0)){
+          if ((ttc <= 2.5) && (ttc > 0.0)){
         	  set_vel += -0.3;
         	  std::cout<< "Decrease the velocity: " << std::endl;
               std::cout<< "TTC: " << ttc << std::endl;
+              // check the ttc_s at adjacent lanes
+              switch(lane){
+                   case 0: ttc_left = -999.9;
+                           ttc_right = ttc_calculation(sensor_fusion, 1, lane_width, end_path_s, car_s, car_speed, true, false);
+                           break;
+                   case 1: ttc_left = ttc_calculation(sensor_fusion, 0, lane_width, end_path_s, car_s, car_speed, true, false);
+                           ttc_right = ttc_calculation(sensor_fusion, 2, lane_width, end_path_s, car_s, car_speed, true, false);
+                           break;
+                   case 2: ttc_left = ttc_calculation(sensor_fusion, 1, lane_width, end_path_s, car_s, car_speed, true, false);
+                           ttc_right = -999.9;
+                           break;
+              }
+              if (ttc_left > ttc){
+            	  lane -= 1;
+              }
+              else if (ttc_right > ttc){
+            	  lane += 1;
+              }
           }
           else{
         	  if ((max_vel - set_vel > 0.0) && (set_vel < 49.5)) {
