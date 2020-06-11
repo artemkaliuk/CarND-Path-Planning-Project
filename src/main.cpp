@@ -173,7 +173,7 @@ int main() {
           double max_vel = 49.5;
 
           int lane_width = 4;
-          double anchor_spacing = 30.0;
+          double anchor_spacing = 50.0;
           double dist_inc = 0.3; // spacing between the waypoints
 
           double ttc = ttc_calculation(sensor_fusion, lane, lane_width, end_path_s, car_s, car_speed, true, false);
@@ -181,7 +181,7 @@ int main() {
           double ttc_right = -999.9;
 
           // If TTC is too small, check for a possible lane change - if a lane change is not possible, slow down
-          if ((ttc <= 2.5) && (ttc > 0.0)){
+          if ((ttc <= 3.5) && (ttc > 0.0)){
         	  set_vel += -0.3;
         	  std::cout<< "Decrease the velocity: " << std::endl;
               std::cout<< "TTC: " << ttc << std::endl;
