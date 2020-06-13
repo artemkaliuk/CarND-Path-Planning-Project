@@ -22,8 +22,7 @@ bool lane_occupancy(vector<vector<double>> sensor_fusion, int lane, double car_s
 	double dist2ego = 9999.9;
 	int target_idx_front;
 
-
-	for (int i = 0; i < sensor_fusion.size(); i++){
+	for (int i = 0; i < sensor_fusion.size(); i++){ // go through the object list, find objects within the target lane and find longitudinal distance between the ego car and the object
 		if ((sensor_fusion[i][6] >= lane_width * lane) && (sensor_fusion[i][6] <= (lane + 1) * lane_width)){
 			double target_vx = sensor_fusion[i][3];
 			double target_vy = sensor_fusion[i][4];
@@ -43,7 +42,6 @@ bool lane_occupancy(vector<vector<double>> sensor_fusion, int lane, double car_s
 				}
 			}
 		}
-
 	}
 
 	if (distance2collision_front > 30.0) {
@@ -251,7 +249,7 @@ int main() {
 
           int lane_width = 4;
           int target_lane_idx;
-          double anchor_spacing = 50.0;
+          double anchor_spacing = 50.0; // spacing between the anchor points of the spline for smoother trajectories
           double dist_inc = 0.3; // spacing between the waypoints
           bool lane_free_left = false;
           bool lane_free_right = false;
@@ -277,21 +275,21 @@ int main() {
                            ttc_left[1] = 999.9;
                            ttc_right = ttc_calculation(sensor_fusion, 1, lane_width, end_path_s, car_s, car_speed, true, false);
                            lane_free_right = lane_occupancy(sensor_fusion, 1, car_s, lane_width);
-                           if ((lane_free_right == true) && (ttc_right[0] > ttc[0]) && (ttc_right[1] < -1.2)){
+                           if ((lane_free_right == true)){ //&& (ttc_right[0] > ttc[0]) && (ttc_right[1] < -1.2)){
                         	   target_lane_idx = 1; // change lane to the left
                            }
                            else{
                         	   target_lane_idx = 0; // stay in the current lane
                            }
                            break;
-                   case 1: ttc_left = ttc_calculation(sensor_fusion, 0, lane_width, end_path_s, car_s, car_speed, true, false);
-                           ttc_right = ttc_calculation(sensor_fusion, 2, lane_width, end_path_s, car_s, car_speed, true, false);
+                   case 1: ttc_left = ttc_calculation(sensor_fusion, 0, lane_width, end_path_s, car_s, car_speed, true, true);
+                           ttc_right = ttc_calculation(sensor_fusion, 2, lane_width, end_path_s, car_s, car_speed, true, true);
                            lane_free_left = lane_occupancy(sensor_fusion, 0, car_s, lane_width); // check the occupancy of the left lane
                            lane_free_right = lane_occupancy(sensor_fusion, 2, car_s, lane_width); // check the occupancy of the right lane
-                           if ((lane_free_left == true) && (ttc_left[0] > ttc[0]) && (ttc_left[1] < -1.2)){ // if left lane is free and the ttc to the front and rear vehicles is large enough
+                           if ((lane_free_left == true)){// && (ttc_left[0] > ttc[0]) && (ttc_left[1] < -1.2)){ // if left lane is free and the ttc to the front and rear vehicles is large enough
                         	   target_lane_idx = 0; // change lane to the left
                            }
-                           else if ((lane_free_right == true) && (ttc_right[0] > ttc[0]) && (ttc_right[1] < -1.2)){ // if right lane is free and the ttc to the front and rear vehicles is large enough
+                           else if ((lane_free_right == true)){ //&& (ttc_right[0] > ttc[0]) && (ttc_right[1] < -1.2)){ // if right lane is free and the ttc to the front and rear vehicles is large enough
                         	   target_lane_idx = 2; // change lane to the right
                            }
                            else{
@@ -300,11 +298,11 @@ int main() {
                            std::cout << "Left lane free: " << lane_free_left << std::endl;
                            std::cout << "Right lane free: " << lane_free_right << std::endl;
                            break;
-                   case 2: ttc_left = ttc_calculation(sensor_fusion, 1, lane_width, end_path_s, car_s, car_speed, true, false);
+                   case 2: ttc_left = ttc_calculation(sensor_fusion, 1, lane_width, end_path_s, car_s, car_speed, true, true);
                            ttc_right[0] = -999.9;
                            ttc_right[1] = 999.9;
                            lane_free_left = lane_occupancy(sensor_fusion, 1, car_s, lane_width);
-                           if ((lane_free_left == true) && (ttc_left[0] > ttc[0]) && (ttc_left[1] < -2.0)){ // if left lane is free and the ttc to the front and rear vehicles is large enough
+                           if ((lane_free_left == true)){// && (ttc_left[0] > ttc[0]) && (ttc_left[1] < -2.0)){ // if left lane is free and the ttc to the front and rear vehicles is large enough
                         	   target_lane_idx = 1; // change lane to the left
                            }
                            else{
@@ -320,7 +318,9 @@ int main() {
         	  }
           }
 
-
+          /** DISCLAIMER: This part of the code was implemented based on the ideas of Udacity instructors from the Q&A video session (https://www.youtube.com/watch?v=7sI3VHFPP0w&feature=youtu.be)
+           *
+           */
           // if the size of the previous path is too small, use the current position of the car and project it one step to the past based on the current orientation
           if (prev_size < 2){
         	  double prev_car_x = car_x - cos(car_yaw);
