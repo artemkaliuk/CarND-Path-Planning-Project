@@ -14,7 +14,53 @@ using nlohmann::json;
 using std::string;
 using std::vector;
 
-double ttc_calculation(vector<vector<double>> sensor_fusion, int lane, int lane_width, double end_path_s, double car_s, double car_speed, bool front, bool rear){
+bool lane_occupancy(vector<vector<double>> sensor_fusion, int lane, double car_s, int lane_width){
+	bool lane_free_front = false;
+	bool lane_free_rear = false;
+	double distance2collision_front = 9999.9;
+	double distance2collision_rear = -9999.9;
+	double dist2ego = 9999.9;
+	int target_idx_front;
+
+
+	for (int i = 0; i < sensor_fusion.size(); i++){
+		if ((sensor_fusion[i][6] >= lane_width * lane) && (sensor_fusion[i][6] <= (lane + 1) * lane_width)){
+			double target_vx = sensor_fusion[i][3];
+			double target_vy = sensor_fusion[i][4];
+			double target_s = sensor_fusion[i][5];
+			dist2ego = target_s - car_s;
+
+			if (dist2ego >= 0.0) { // the target car is in front of the ego
+
+				if (distance2collision_front > dist2ego) {
+					target_idx_front = i;
+					distance2collision_front = dist2ego;
+				}
+			}
+			else{ // the target car is behind the ego
+				if (distance2collision_rear < dist2ego){
+					distance2collision_rear = dist2ego;
+				}
+			}
+		}
+
+	}
+
+	if (distance2collision_front > 30.0) {
+		lane_free_front = true;
+	} else {
+		lane_free_front = false;
+	}
+
+	if (distance2collision_rear < -10) {
+		lane_free_rear = true;
+	} else {
+		lane_free_rear = false;
+	}
+	return lane_free_front && lane_free_rear;
+}
+
+vector<double> ttc_calculation(vector<vector<double>> sensor_fusion, int lane, int lane_width, double end_path_s, double car_s, double car_speed, bool front, bool rear){
     // Avoid collisions
     // 1. Iterate through all the cars and check if they are in our lane
     // 2. For the cars in our lane: check for the time gap - if the time gap is smaller than expected, adapt the target speed
@@ -23,7 +69,9 @@ double ttc_calculation(vector<vector<double>> sensor_fusion, int lane, int lane_
     int idx = 99;
     int idx_rear = 99;
     double distance2collision = 9999.9;
-    double ttc = 99.9;
+    vector <double> ttc;
+    ttc.push_back(99.9); // initializing TTC for the front area
+    ttc.push_back(-99.9); // initializing TTC for the rear area
     for (int i = 0; i < sensor_fusion.size(); i++){
   	  // Check for all the objects within the ego lane
   	  if ((sensor_fusion[i][6] >= lane_width * lane) && (sensor_fusion[i][6] <= (lane + 1) * lane_width)){
@@ -31,7 +79,7 @@ double ttc_calculation(vector<vector<double>> sensor_fusion, int lane, int lane_
   		  double target_vy = sensor_fusion[i][4];
   		  double target_s = sensor_fusion[i][5];
   		  double delta_s = target_s - car_s;
-  		  // Choose the object in the ego lane that is closest to the ego car
+  		  // Choose the object in the target lane that is closest to the ego car
   		  if (distance2collision > abs(delta_s)){
   			  // Check front targets
   			  if (front == true){
@@ -52,7 +100,6 @@ double ttc_calculation(vector<vector<double>> sensor_fusion, int lane, int lane_
   				 else{
   					 idx_rear = 99;
   				 }
-
   			  }
   		  }
   	  }
@@ -65,17 +112,47 @@ double ttc_calculation(vector<vector<double>> sensor_fusion, int lane, int lane_
       double target_s = sensor_fusion[idx][5];
   	  double target_speed = sqrt(target_vx * target_vx + target_vy * target_vy)/2.24;
   	  // Calculate the distance between the target vehicle and the last point of the planned path
-  	  double s_diff = target_s - car_s;
+  	  double s_diff = target_s - car_s; // calculate the distance between the ego vehicle and the target
+  	  double speed_diff = car_speed / 2.24 - target_speed;// calculate the speed difference between the ego and the target
+
+  	  if (abs(speed_diff) < .001){ // division by zero check
+  		  speed_diff = .01;
+  	  }
+
   	  std::cout << "Distance2Target" << s_diff << std::endl;
   	  // if the target car is far away and the ego car is too slow, set the time to collision to a large value
-  	  if ((s_diff > 80) || ((car_speed / 2.24 - target_speed) < -5.0)){
-  		  ttc = 999.9;
+  	  if ((s_diff > 80) || (speed_diff < -5.0)){
+  		  ttc[0] = 999.9;
   	  }
   	  else{
-  		  ttc = s_diff / (car_speed / 2.24 - target_speed);
+  		  ttc[0] = s_diff / (speed_diff);
   	  }
     }
-    std::cout<<"TTC: " << ttc << std::endl;
+    if (idx_rear != 99){
+         	  // Calculate the time to collision metric
+      	  double target_vx = sensor_fusion[idx_rear][3];
+      	  double target_vy = sensor_fusion[idx_rear][4];
+          double target_s = sensor_fusion[idx_rear][5];
+      	  double target_speed = sqrt(target_vx * target_vx + target_vy * target_vy)/2.24;
+      	  // Calculate the distance between the target vehicle and the last point of the planned path
+      	  double s_diff = target_s - car_s; // calculate the distance between the ego vehicle and the target
+      	  double speed_diff = car_speed / 2.24 - target_speed; // calculate the speed difference between the ego vehicle and the target
+
+      	  if (abs(speed_diff) < .001){ // division by zero check
+      		  speed_diff = .01;
+      	  }
+
+      	  std::cout << "Distance2Target" << s_diff << std::endl;
+      	  // if the target car is far away and the ego car is too slow, set the time to collision to a large value
+      	  if ((s_diff < -30) || ((car_speed / 2.24 - target_speed) > 5.0)){
+      		  ttc[1] = 999.9;
+      	  }
+      	  else{
+      		  ttc[1] = s_diff / (car_speed / 2.24 - target_speed);
+      	  }
+        }
+
+    std::cout<<"TTC: " << ttc[0] << std::endl;
     return ttc;
 }
 
@@ -159,7 +236,7 @@ int main() {
 
           json msgJson;
 
-          /**
+          /**2
            * TODO: define a path made up of (x,y) points that the car will visit
            *   sequentially every .02 seconds
            */
@@ -173,38 +250,71 @@ int main() {
           double max_vel = 49.5;
 
           int lane_width = 4;
+          int target_lane_idx;
           double anchor_spacing = 50.0;
           double dist_inc = 0.3; // spacing between the waypoints
+          bool lane_free_left = false;
+          bool lane_free_right = false;
 
-          double ttc = ttc_calculation(sensor_fusion, lane, lane_width, end_path_s, car_s, car_speed, true, false);
-          double ttc_left = -999.9;
-          double ttc_right = -999.9;
+
+          vector<double> ttc;
+          ttc = ttc_calculation(sensor_fusion, lane, lane_width, end_path_s, car_s, car_speed, true, false);
+          vector<double> ttc_left;
+          ttc_left.push_back(999.9);
+          ttc_left.push_back(-999.9);
+          vector<double> ttc_right;
+          ttc_right.push_back(999.9);
+          ttc_right.push_back(-999.9);
 
           // If TTC is too small, check for a possible lane change - if a lane change is not possible, slow down
-          if ((ttc <= 3.5) && (ttc > 0.0)){
+          if ((ttc[0] <= 3.5) && (ttc[0] > 0.0)){
         	  set_vel += -0.3;
-        	  std::cout<< "Decrease the velocity: " << std::endl;
-              std::cout<< "TTC: " << ttc << std::endl;
+        	  std::cout << "Decrease the velocity: " << std::endl;
+              std::cout << "TTC: " << ttc[0] << std::endl;
               // check the ttc_s at adjacent lanes
-              switch(lane){
-                   case 0: ttc_left = -999.9;
+             switch(lane){
+                   case 0: ttc_left[0] = -999.9;
+                           ttc_left[1] = 999.9;
                            ttc_right = ttc_calculation(sensor_fusion, 1, lane_width, end_path_s, car_s, car_speed, true, false);
+                           lane_free_right = lane_occupancy(sensor_fusion, 1, car_s, lane_width);
+                           if ((lane_free_right == true) && (ttc_right[0] > ttc[0]) && (ttc_right[1] < -1.2)){
+                        	   target_lane_idx = 1; // change lane to the left
+                           }
+                           else{
+                        	   target_lane_idx = 0; // stay in the current lane
+                           }
                            break;
                    case 1: ttc_left = ttc_calculation(sensor_fusion, 0, lane_width, end_path_s, car_s, car_speed, true, false);
                            ttc_right = ttc_calculation(sensor_fusion, 2, lane_width, end_path_s, car_s, car_speed, true, false);
+                           lane_free_left = lane_occupancy(sensor_fusion, 0, car_s, lane_width); // check the occupancy of the left lane
+                           lane_free_right = lane_occupancy(sensor_fusion, 2, car_s, lane_width); // check the occupancy of the right lane
+                           if ((lane_free_left == true) && (ttc_left[0] > ttc[0]) && (ttc_left[1] < -1.2)){ // if left lane is free and the ttc to the front and rear vehicles is large enough
+                        	   target_lane_idx = 0; // change lane to the left
+                           }
+                           else if ((lane_free_right == true) && (ttc_right[0] > ttc[0]) && (ttc_right[1] < -1.2)){ // if right lane is free and the ttc to the front and rear vehicles is large enough
+                        	   target_lane_idx = 2; // change lane to the right
+                           }
+                           else{
+                        	   target_lane_idx = 1; // stay in the current lane
+                           }
+                           std::cout << "Left lane free: " << lane_free_left << std::endl;
+                           std::cout << "Right lane free: " << lane_free_right << std::endl;
                            break;
                    case 2: ttc_left = ttc_calculation(sensor_fusion, 1, lane_width, end_path_s, car_s, car_speed, true, false);
-                           ttc_right = -999.9;
+                           ttc_right[0] = -999.9;
+                           ttc_right[1] = 999.9;
+                           lane_free_left = lane_occupancy(sensor_fusion, 1, car_s, lane_width);
+                           if ((lane_free_left == true) && (ttc_left[0] > ttc[0]) && (ttc_left[1] < -2.0)){ // if left lane is free and the ttc to the front and rear vehicles is large enough
+                        	   target_lane_idx = 1; // change lane to the left
+                           }
+                           else{
+                        	   target_lane_idx = 2; // stay in the current lane
+                           }
                            break;
-              }
-              if (ttc_left > ttc){
-            	  lane -= 1;
-              }
-              else if (ttc_right > ttc){
-            	  lane += 1;
-              }
+             }
+             lane = target_lane_idx;
           }
-          else{
+          else{ // if the ttc is high enough, accelerate to achieve the max speed
         	  if ((max_vel - set_vel > 0.0) && (set_vel < 49.5)) {
         		  set_vel += 0.3;
         	  }
