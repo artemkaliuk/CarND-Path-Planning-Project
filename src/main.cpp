@@ -7,6 +7,7 @@
 #include "Eigen-3.3/Eigen/QR"
 #include "helpers.h"
 #include "json.hpp"
+#include "planner.hpp"
 #include "spline.h"
 
 // for convenience
@@ -80,25 +81,23 @@ vector<double> ttc_calculation(vector<vector<double>> sensor_fusion, int lane, i
   		  // Choose the object in the target lane that is closest to the ego car
   		  if (distance2collision > abs(delta_s)){
   			  // Check front targets
-  			  if (front == true){
-  				  if (delta_s > 0){
-  					  idx = i;
-  					  std::cout << "Target found" << std::endl;
-  					  distance2collision = delta_s;
-  				  }
-  				else{
-  					idx = 99;
-  				}
-  			  }
-  			  // Check the rear targets
-  			  if (rear == true){
-  				 if (delta_s < 0){
-  					 idx_rear = i;
-  				 }
-  				 else{
-  					 idx_rear = 99;
-  				 }
-  			  }
+				if (front == true) {
+					if (delta_s > 0) {
+						idx = i;
+						//std::cout << "Target found" << std::endl;
+						distance2collision = delta_s;
+					} else {
+						idx = 99;
+					}
+				}
+				// Check the rear targets
+				if (rear == true) {
+					if (delta_s < 0) {
+						idx_rear = i;
+					} else {
+						idx_rear = 99;
+					}
+				}
   		  }
   	  }
     }
@@ -117,7 +116,7 @@ vector<double> ttc_calculation(vector<vector<double>> sensor_fusion, int lane, i
   		  speed_diff = .01;
   	  }
 
-  	  std::cout << "Distance2Target" << s_diff << std::endl;
+  	  //std::cout << "Distance2Target" << s_diff << std::endl;
   	  // if the target car is far away and the ego car is too slow, set the time to collision to a large value
   	  if ((s_diff > 80) || (speed_diff < -5.0)){
   		  ttc[0] = 999.9;
@@ -150,7 +149,7 @@ vector<double> ttc_calculation(vector<vector<double>> sensor_fusion, int lane, i
       	  }
         }
 
-    std::cout<<"TTC: " << ttc[0] << std::endl;
+    //std::cout<<"TTC: " << ttc[0] << std::endl;
     return ttc;
 }
 
@@ -227,7 +226,6 @@ int main() {
           // Previous path's end s and d values 
           double end_path_s = j[1]["end_path_s"];
           double end_path_d = j[1]["end_path_d"];
-
           // Sensor Fusion Data, a list of all other cars on the same side 
           //   of the road.
           auto sensor_fusion = j[1]["sensor_fusion"];
@@ -251,12 +249,29 @@ int main() {
           int target_lane_idx;
           double anchor_spacing = 50.0; // spacing between the anchor points of the spline for smoother trajectories
           double dist_inc = 0.3; // spacing between the waypoints
-          bool lane_free_left = false;
-          bool lane_free_right = false;
+
+          Lane egoLane = Lane(lane, lane_width, car_s, car_speed);
+ //         egoLane.lane_id = lane;
+ //         egoLane.lane_width = lane_width;
+ //         egoLane
+          egoLane.getFront(sensor_fusion, egoLane.lane_width, egoLane.ego_s, egoLane.ego_speed, &egoLane.id_front, &egoLane.distance2collision_front, &egoLane.ttc_front, &egoLane.collision_free_front);
+          egoLane.getRear(sensor_fusion, egoLane.lane_width, egoLane.ego_s, egoLane.ego_speed, &egoLane.id_front, &egoLane.distance2collision_front, &egoLane.ttc_front, &egoLane.collision_free_rear);
+
+          if (!egoLane.collision_free_front) {
+        	  set_vel += -0.3;
+
+        	  std::cout << "Target (front) found, TTC: " << egoLane.ttc_front << std::endl;
+          } else if ((max_vel - set_vel > 0.0) && (set_vel < 48.5)) {
+        	  set_vel += 1.0;
+        	  std::cout << "Accelerating 1.0!" << std::endl;
+          } else if ((set_vel >= 49.5) && (set_vel <= 49.9)) {
+        	  set_vel += 0.1;
+        	  std::cout << "Accelerating 0.1!" << std::endl;
+          }
 
 
-          vector<double> ttc;
-          ttc = ttc_calculation(sensor_fusion, lane, lane_width, end_path_s, car_s, car_speed, true, false);
+          /* ttc = ttc_calculation(sensor_fusion, lane, lane_width, end_path_s, car_s, car_speed, true, false);
+
           vector<double> ttc_left;
           ttc_left.push_back(999.9);
           ttc_left.push_back(-999.9);
@@ -267,8 +282,8 @@ int main() {
           // If TTC is too small, check for a possible lane change - if a lane change is not possible, slow down
           if ((ttc[0] <= 3.5) && (ttc[0] > 0.0)){
         	  set_vel += -0.3;
-        	  std::cout << "Decrease the velocity: " << std::endl;
-              std::cout << "TTC: " << ttc[0] << std::endl;
+        	  //std::cout << "Decrease the velocity: " << std::endl;
+              //std::cout << "TTC: " << ttc[0] << std::endl;
               // check the ttc_s at adjacent lanes
              switch(lane){
                    case 0: ttc_left[0] = -999.9;
@@ -295,8 +310,8 @@ int main() {
                            else{
                         	   target_lane_idx = 1; // stay in the current lane
                            }
-                           std::cout << "Left lane free: " << lane_free_left << std::endl;
-                           std::cout << "Right lane free: " << lane_free_right << std::endl;
+                           //std::cout << "Left lane free: " << lane_free_left << std::endl;
+                           //std::cout << "Right lane free: " << lane_free_right << std::endl;
                            break;
                    case 2: ttc_left = ttc_calculation(sensor_fusion, 1, lane_width, end_path_s, car_s, car_speed, true, true);
                            ttc_right[0] = -999.9;
@@ -317,6 +332,8 @@ int main() {
         		  set_vel += 0.3;
         	  }
           }
+          */
+
 
           /** DISCLAIMER: This part of the code was implemented based on the ideas of Udacity instructors from the Q&A video session (https://www.youtube.com/watch?v=7sI3VHFPP0w&feature=youtu.be)
            *
