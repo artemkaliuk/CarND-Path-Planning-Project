@@ -168,7 +168,7 @@ int main() {
   // The max s value before wrapping around the track back to 0
   double max_s = 6945.554;
   static int lane = 1;
-  static double set_vel = 0;
+  static double set_vel = 0.0;
 
   std::ifstream in_map_(map_file_.c_str(), std::ifstream::in);
 
@@ -251,23 +251,28 @@ int main() {
           double dist_inc = 0.3; // spacing between the waypoints
 
           Lane egoLane = Lane(lane, lane_width, car_s, car_speed);
- //         egoLane.lane_id = lane;
- //         egoLane.lane_width = lane_width;
- //         egoLane
           egoLane.getFront(sensor_fusion, egoLane.lane_width, egoLane.ego_s, egoLane.ego_speed, &egoLane.id_front, &egoLane.distance2collision_front, &egoLane.ttc_front, &egoLane.collision_free_front);
-          egoLane.getRear(sensor_fusion, egoLane.lane_width, egoLane.ego_s, egoLane.ego_speed, &egoLane.id_front, &egoLane.distance2collision_front, &egoLane.ttc_front, &egoLane.collision_free_rear);
+          //egoLane.getRear(sensor_fusion, egoLane.lane_width, egoLane.ego_s, egoLane.ego_speed, &egoLane.id_front, &egoLane.distance2collision_front, &egoLane.ttc_front, &egoLane.collision_free_rear);
+
+          //Lane leftLane = Lane(lane - 1, lane_width, car_s, car_speed);
+          //leftLane.getFront(sensor_fusion, leftLane.lane_width, leftLane.ego_s, leftLane.ego_speed, &leftLane.id_front, &leftLane.distance2collision_front, &leftLane.ttc_front, &leftLane.collision_free_front);
+          //leftLane.getRear(sensor_fusion, leftLane.lane_width, leftLane.ego_s, leftLane.ego_speed, &leftLane.id_front, &leftLane.distance2collision_front, &leftLane.ttc_front, &leftLane.collision_free_rear);
+
+          //Lane rightLane = Lane(lane + 1, lane_width, car_s, car_speed);
+          //rightLane.getFront(sensor_fusion, rightLane.lane_width, rightLane.ego_s, rightLane.ego_speed, &rightLane.id_front, &rightLane.distance2collision_front, &rightLane.ttc_front, &rightLane.collision_free_front);
+          //rightLane.getRear(sensor_fusion, rightLane.lane_width, rightLane.ego_s, rightLane.ego_speed, &rightLane.id_front, &rightLane.distance2collision_front, &rightLane.ttc_front, &rightLane.collision_free_rear);
 
           if (!egoLane.collision_free_front) {
         	  set_vel += -0.3;
-
-        	  std::cout << "Target (front) found, TTC: " << egoLane.ttc_front << std::endl;
-          } else if ((max_vel - set_vel > 0.0) && (set_vel < 48.5)) {
-        	  set_vel += 1.0;
-        	  std::cout << "Accelerating 1.0!" << std::endl;
-          } else if ((set_vel >= 49.5) && (set_vel <= 49.9)) {
-        	  set_vel += 0.1;
-        	  std::cout << "Accelerating 0.1!" << std::endl;
-          }
+        	  std::cout << "Decelerating!" << std::endl;
+        	  //Evaluate lanes for a possible lane change
+        	  //std::cout << "Speed egolane: " << egoLane.avg_lane_speed << std::endl;
+          } else if ((max_vel - set_vel > 0.0) && (set_vel < 49.5)) {
+        	  set_vel += 0.3;
+          } //else if ((set_vel >= 49.5) && (set_vel <= 49.8)) {
+        	  //set_vel += 0.1;
+        	  //std::cout << "Accelerating 0.1!" << std::endl;
+         // }
 
 
           /* ttc = ttc_calculation(sensor_fusion, lane, lane_width, end_path_s, car_s, car_speed, true, false);
