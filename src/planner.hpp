@@ -5,6 +5,11 @@
 
 using std::vector;
 
+struct lane_identifiers
+{
+	enum lane_enum {left = 0, middle = 1, right = 2};
+};
+
 class Lane{
 public:
 	// Lane functions
@@ -12,25 +17,30 @@ public:
 
 	//int target_in_lane(vector<vector<double>> sensor_fusion, int lane_id, int lane_width, double ego_s);
 	//double speed_efficiency(vector<vector<double>> sensor_fusion, int lane_id, int lane_width, double ego_s);
-	int lane_id, lane_width, id_front, id_rear;
-	double ego_s, ego_speed, distance2collision_front, distance2collision_rear, ttc_front, ttc_rear, avg_lane_speed;
-	bool collision_free_front, collision_free_rear;
-	Lane(int id, int width, double car_s, double car_speed){
+	int target_id;
+	double ego_s, ego_d, ego_v, target_s, target_d, target_delta_v, lane_id, lane_width;
+
+	struct object{
+		int id;
+		double pos_x, pos_y, v_x, v_y, pos_s, pos_d;
+	};
+
+	// find the ids of the objects located on this particular lane
+	vector<object> Obj2LaneAssignment(vector<vector<double>>sensor_fusion, double lane_id, double lane_width, double ego_s, double ego_v, int *target_id, double *delta_v_target, double *target_s, double *target_d);
+
+	Lane(double id, double width, double car_s, double car_d, double car_speed, double max_allowed_speed, vector<vector<double>>sensor_fusion){
 			lane_id = id;
 			lane_width = width;
 			ego_s = car_s;
-			ego_speed = car_speed;
-			id_front = 99;
-			id_rear = 99;
-			distance2collision_front = 999.9;
-			distance2collision_rear = -999.9;
-			ttc_front = 999.9;
-			ttc_rear = -999.9;
-			collision_free_front = false;
-			collision_free_rear = false;
-			avg_lane_speed = 50.0;
-		}
-	void getFront(vector<vector<double>> objects, int lane_width, double ego_s, double ego_v, int *id_front, double *distance2collision_front, double *ttc_front, bool *collision_free_front);
-    void getRear(vector<vector<double>> objects, int lane_width, double ego_s, double ego_v, int *id_rear, double *distance2collision_rear, double *ttc_rear, bool *collision_free_rear);
+			ego_d = car_d;
+			ego_v = car_speed;
+			vector<int> obj_id;
+			double delta_v_target;
+			// Find out the
 
+			vector<object> lane_objects;
+			lane_objects = Obj2LaneAssignment(sensor_fusion, lane_id, lane_width, ego_s, ego_v, &target_id, &target_delta_v, &target_s, &target_d);
+		}
 };
+
+//float getEgoLaneCost(double max_speed, double avg_speed);

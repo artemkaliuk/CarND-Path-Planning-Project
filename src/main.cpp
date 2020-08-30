@@ -15,144 +15,6 @@ using nlohmann::json;
 using std::string;
 using std::vector;
 
-bool lane_occupancy(vector<vector<double>> sensor_fusion, int lane, double car_s, int lane_width){
-	bool lane_free_front = false;
-	bool lane_free_rear = false;
-	double distance2collision_front = 9999.9;
-	double distance2collision_rear = -9999.9;
-	double dist2ego = 9999.9;
-	int target_idx_front;
-
-	for (int i = 0; i < sensor_fusion.size(); i++){ // go through the object list, find objects within the target lane and find longitudinal distance between the ego car and the object
-		if ((sensor_fusion[i][6] >= lane_width * lane) && (sensor_fusion[i][6] <= (lane + 1) * lane_width)){
-			double target_vx = sensor_fusion[i][3];
-			double target_vy = sensor_fusion[i][4];
-			double target_s = sensor_fusion[i][5];
-			dist2ego = target_s - car_s;
-
-			if (dist2ego >= 0.0) { // the target car is in front of the ego
-
-				if (distance2collision_front > dist2ego) {
-					target_idx_front = i;
-					distance2collision_front = dist2ego;
-				}
-			}
-			else{ // the target car is behind the ego
-				if (distance2collision_rear < dist2ego){
-					distance2collision_rear = dist2ego;
-				}
-			}
-		}
-	}
-
-	if (distance2collision_front > 30.0) {
-		lane_free_front = true;
-	} else {
-		lane_free_front = false;
-	}
-
-	if (distance2collision_rear < -10) {
-		lane_free_rear = true;
-	} else {
-		lane_free_rear = false;
-	}
-	return lane_free_front && lane_free_rear;
-}
-
-vector<double> ttc_calculation(vector<vector<double>> sensor_fusion, int lane, int lane_width, double end_path_s, double car_s, double car_speed, bool front, bool rear){
-    // Avoid collisions
-    // 1. Iterate through all the cars and check if they are in our lane
-    // 2. For the cars in our lane: check for the time gap - if the time gap is smaller than expected, adapt the target speed
-    // 3. Feed the target speed in to the waypoint generator
-
-    int idx = 99;
-    int idx_rear = 99;
-    double distance2collision = 9999.9;
-    vector <double> ttc;
-    ttc.push_back(99.9); // initializing TTC for the front area
-    ttc.push_back(-99.9); // initializing TTC for the rear area
-    for (int i = 0; i < sensor_fusion.size(); i++){
-  	  // Check for all the objects within the ego lane
-  	  if ((sensor_fusion[i][6] >= lane_width * lane) && (sensor_fusion[i][6] <= (lane + 1) * lane_width)){
-  		  double target_vx = sensor_fusion[i][3];
-  		  double target_vy = sensor_fusion[i][4];
-  		  double target_s = sensor_fusion[i][5];
-  		  double delta_s = target_s - car_s;
-  		  // Choose the object in the target lane that is closest to the ego car
-  		  if (distance2collision > abs(delta_s)){
-  			  // Check front targets
-				if (front == true) {
-					if (delta_s > 0) {
-						idx = i;
-						//std::cout << "Target found" << std::endl;
-						distance2collision = delta_s;
-					} else {
-						idx = 99;
-					}
-				}
-				// Check the rear targets
-				if (rear == true) {
-					if (delta_s < 0) {
-						idx_rear = i;
-					} else {
-						idx_rear = 99;
-					}
-				}
-  		  }
-  	  }
-    }
-
-    if (idx != 99){
-     	  // Calculate the time to collision metric
-  	  double target_vx = sensor_fusion[idx][3];
-  	  double target_vy = sensor_fusion[idx][4];
-      double target_s = sensor_fusion[idx][5];
-  	  double target_speed = sqrt(target_vx * target_vx + target_vy * target_vy)/2.24;
-  	  // Calculate the distance between the target vehicle and the last point of the planned path
-  	  double s_diff = target_s - car_s; // calculate the distance between the ego vehicle and the target
-  	  double speed_diff = car_speed / 2.24 - target_speed;// calculate the speed difference between the ego and the target
-
-  	  if (abs(speed_diff) < .001){ // division by zero check
-  		  speed_diff = .01;
-  	  }
-
-  	  //std::cout << "Distance2Target" << s_diff << std::endl;
-  	  // if the target car is far away and the ego car is too slow, set the time to collision to a large value
-  	  if ((s_diff > 80) || (speed_diff < -5.0)){
-  		  ttc[0] = 999.9;
-  	  }
-  	  else{
-  		  ttc[0] = s_diff / (speed_diff);
-  	  }
-    }
-    if (idx_rear != 99){
-         	  // Calculate the time to collision metric
-      	  double target_vx = sensor_fusion[idx_rear][3];
-      	  double target_vy = sensor_fusion[idx_rear][4];
-          double target_s = sensor_fusion[idx_rear][5];
-      	  double target_speed = sqrt(target_vx * target_vx + target_vy * target_vy)/2.24;
-      	  // Calculate the distance between the target vehicle and the last point of the planned path
-      	  double s_diff = target_s - car_s; // calculate the distance between the ego vehicle and the target
-      	  double speed_diff = car_speed / 2.24 - target_speed; // calculate the speed difference between the ego vehicle and the target
-
-      	  if (abs(speed_diff) < .001){ // division by zero check
-      		  speed_diff = .01;
-      	  }
-
-      	  std::cout << "Distance2Target" << s_diff << std::endl;
-      	  // if the target car is far away and the ego car is too slow, set the time to collision to a large value
-      	  if ((s_diff < -30) || ((car_speed / 2.24 - target_speed) > 5.0)){
-      		  ttc[1] = 999.9;
-      	  }
-      	  else{
-      		  ttc[1] = s_diff / (car_speed / 2.24 - target_speed);
-      	  }
-        }
-
-    //std::cout<<"TTC: " << ttc[0] << std::endl;
-    return ttc;
-}
-
 int main() {
   uWS::Hub h;
 
@@ -167,7 +29,6 @@ int main() {
   string map_file_ = "../data/highway_map.csv";
   // The max s value before wrapping around the track back to 0
   double max_s = 6945.554;
-  static int lane = 1;
   static double set_vel = 0.0;
 
   std::ifstream in_map_(map_file_.c_str(), std::ifstream::in);
@@ -236,22 +97,102 @@ int main() {
            * TODO: define a path made up of (x,y) points that the car will visit
            *   sequentially every .02 seconds
            */
+          double v_x = sensor_fusion[0][3];
+          double v_y = sensor_fusion[0][4];
+          double pos_s = sensor_fusion[0][5];
+          double pos_d = sensor_fusion[0][6];
+
           int prev_size = previous_path_x.size();
           vector<double> anchor_x;
           vector<double> anchor_y;
           double ref_x = car_x;
           double ref_y = car_y;
           double ref_yaw = deg2rad(car_yaw);
+          double safe_timegap = 2; // time gap between the ego and target vehicle
 
-          double max_vel = 49.5;
+          double max_acc_m_s_2 = 10; // maximum acceleration in meters per second
+          double max_acc_mphps_cycle = max_acc_m_s_2 * 2.2369 * 0.02 * 0.8; // 80% of the maximum acceleration in miles per hour per frame
+          // Calculate the safe distance in case if the front vehicle applies maximum deceleration
+          double max_vel_mph = 50.0;
+          double max_vel = max_vel_mph * 1.609 / 3.6; // maximal allowed speed meters per second
 
-          int lane_width = 4;
+          //double max_vel_target_final_m_s = max_vel - max_acc_s * safe_timegap;
+          //double max_vel_difference = max_vel - (max_vel_target_final_m_s);
+          double safe_dist = 30;
+
+          double lane;
+          double lane_neighb1;
+          double lane_neighb2;
+          double lane_width = 4.0;
           int target_lane_idx;
           double anchor_spacing = 50.0; // spacing between the anchor points of the spline for smoother trajectories
           double dist_inc = 0.3; // spacing between the waypoints
+          //double max_acc = 10 * 0.016;
 
-          Lane egoLane = Lane(lane, lane_width, car_s, car_speed);
-          egoLane.getFront(sensor_fusion, egoLane.lane_width, egoLane.ego_s, egoLane.ego_speed, &egoLane.id_front, &egoLane.distance2collision_front, &egoLane.ttc_front, &egoLane.collision_free_front);
+          // identify the ego vehicle's current lane
+          if((car_d >= lane_identifiers::left * lane_width) && (car_d < (lane_identifiers::left + 1.0) * lane_width)){
+        	  lane = 0.0;
+        	  lane_neighb1 = 1.0;
+        	  lane_neighb2 = 2.0;
+
+          }
+          else if((car_d >= lane_identifiers::middle * lane_width) && (car_d < (lane_identifiers::middle + 1.0) * lane_width)){
+        	  lane = 1.0;
+        	  lane_neighb1 = 0.0;
+        	  lane_neighb2 = 2.0;
+          }
+          else{
+        	  lane = 2.0;
+        	  lane_neighb1 = 1.0;
+        	  lane_neighb2 = 0.0;
+          }
+          // find the target vehicle
+          Lane egoLane = Lane(lane, lane_width, car_s, car_d, car_speed, max_vel, sensor_fusion);
+          Lane neighb1Lane = Lane(lane_neighb1, lane_width, car_s, car_d, car_speed, max_vel, sensor_fusion);
+          Lane neighb2Lane = Lane(lane_neighb2, lane_width, car_s, car_d, car_speed, max_vel, sensor_fusion);
+
+          std::cout << "set velocity: " << set_vel << std::endl;
+
+          //if (((safe_dist + 15) > egoLane.target_s) && (egoLane.target_delta_v > max_acc_cycle) && (set_vel > 5.0)){
+          if ((safe_dist > egoLane.target_s) || ((safe_dist + 5 > egoLane.target_s) && (egoLane.target_delta_v > max_acc_mphps_cycle))){
+              set_vel -= max_acc_mphps_cycle;
+        	  std::cout << "1 Target : " << egoLane.target_s << " Target delta: " << egoLane.target_delta_v << " max acc: " << max_acc_mphps_cycle << std::endl;
+        	  std::cout << "Deceleration 1" << std::endl;
+          }
+/*          else if (((safe_dist + 15) > egoLane.target_s) && (egoLane.target_delta_v > max_acc_mphps_cycle)){
+        	  set_vel -= max_acc_mphps_cycle*0.5;
+        	  std::cout << "2 Target s1: " << egoLane.target_s << " Target delta: " << egoLane.target_delta_v << std::endl;
+        	  std::cout << "Deceleration 2!!" << std::endl;
+          }
+          */
+          else {
+        	  std::cout << "Acceleration!!!" << std::endl;
+        	  if (set_vel < (max_vel_mph - 0.5)){
+            	  set_vel += max_acc_mphps_cycle;
+
+        	  }
+          }
+
+
+          std::cout << "Target id: " << egoLane.target_id << "Target dist: " << egoLane.target_s << " Delta v: " << egoLane.target_delta_v << " Set speed: " << set_vel << std::endl;
+
+          // maximum change of speed allowed between two frames
+          //Lane egoLane = Lane(lane, lane_width, car_s, car_speed, max_vel);
+          //int neighborLane1_id = (lane + 1) % 3;
+          //Lane neighborLane1 = Lane(neighborLane1_id, lane_width, car_s, car_speed, max_vel);
+          //int neigh borLane2_id = (lane + 2) % 3;
+          //Lane neighborLane2 = Lane(neighborLane2_id, lane_width, car_s, car_speed, max_vel);
+
+
+
+          //egoLane.getFront(sensor_fusion, egoLane.lane_width, egoLane.ego_s, egoLane.ego_speed, &egoLane.id_front, &egoLane.distance2collision_front, &egoLane.target_v_front, &egoLane.ttc_front, &egoLane.collision_free_front, &egoLane.avg_lane_speed, &egoLane.acc_request);
+          //std::cout << "Main avg speed: " << egoLane.avg_lane_speed << std::endl;
+          //float cost = getEgoLaneCost(max_vel, egoLane.avg_lane_speed);
+          //neighborLane1.getFront(sensor_fusion, neighborLane1.lane_width, neighborLane1.ego_s, neighborLane1.ego_speed, &neighborLane1.id_front, &neighborLane1.distance2collision_front, &neighborLane1.target_v_front, &neighborLane1.ttc_front, &neighborLane1.collision_free_front, &neighborLane1.avg_lane_speed);
+          //neighborLane1.getRear(sensor_fusion, neighborLane1.lane_width, neighborLane1.ego_s, neighborLane1.ego_speed, &neighborLane1.id_rear, &neighborLane1.distance2collision_rear, &neighborLane1.ttc_rear, &neighborLane1.collision_free_rear);
+          //neighborLane2.getFront(sensor_fusion, neighborLane2.lane_width, neighborLane2.ego_s, neighborLane2.ego_speed, &neighborLane2.id_front, &neighborLane2.distance2collision_front, &neighborLane2.target_v_front,  &neighborLane2.ttc_front, &neighborLane2.collision_free_front, &neighborLane2.avg_lane_speed);
+          //neighborLane2.getRear(sensor_fusion, neighborLane2.lane_width, neighborLane2.ego_s, neighborLane2.ego_speed, &neighborLane2.id_rear, &neighborLane2.distance2collision_rear, &neighborLane2.ttc_rear, &neighborLane2.collision_free_rear);
+
           //egoLane.getRear(sensor_fusion, egoLane.lane_width, egoLane.ego_s, egoLane.ego_speed, &egoLane.id_front, &egoLane.distance2collision_front, &egoLane.ttc_front, &egoLane.collision_free_rear);
 
           //Lane leftLane = Lane(lane - 1, lane_width, car_s, car_speed);
@@ -261,14 +202,24 @@ int main() {
           //Lane rightLane = Lane(lane + 1, lane_width, car_s, car_speed);
           //rightLane.getFront(sensor_fusion, rightLane.lane_width, rightLane.ego_s, rightLane.ego_speed, &rightLane.id_front, &rightLane.distance2collision_front, &rightLane.ttc_front, &rightLane.collision_free_front);
           //rightLane.getRear(sensor_fusion, rightLane.lane_width, rightLane.ego_s, rightLane.ego_speed, &rightLane.id_front, &rightLane.distance2collision_front, &rightLane.ttc_front, &rightLane.collision_free_rear);
-
+          //std::cout << "acc_request: " << egoLane.acc_request << std::endl;
+          /*std::cout << "distance2collison: " << egoLane.distance2collision_front << std::endl;
           if (!egoLane.collision_free_front) {
-        	  set_vel += -0.3;
-        	  std::cout << "Decelerating!" << std::endl;
+        	  if(abs(egoLane.acc_request) > max_acc){
+        		  std::cout << "decc too large! " << std::endl;
+            	  set_vel += -0.3;//-max_acc;
+        	  }
+        	  else{
+        		  std::cout << "Use requested decc" << std::endl;
+        		  set_vel += -0.3; //egoLane.acc_request;
+        	  }
+*/
+
         	  //Evaluate lanes for a possible lane change
         	  //std::cout << "Speed egolane: " << egoLane.avg_lane_speed << std::endl;
-          } else if ((max_vel - set_vel > 0.0) && (set_vel < 49.5)) {
+   /*       } else if ((max_vel - set_vel > 0.0) && (set_vel < 49.5)) {
         	  set_vel += 0.3;
+        	  std::cout << "Accelerate! << std::endl;
           } //else if ((set_vel >= 49.5) && (set_vel <= 49.8)) {
         	  //set_vel += 0.1;
         	  //std::cout << "Accelerating 0.1!" << std::endl;

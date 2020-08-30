@@ -163,4 +163,7 @@ vector<double> getXY(double s, double d, const vector<double> &maps_s,
   return {x,y};
 }
 
+vector<double> ttc_calculation(vector<vector<double>> sensor_fusion, int lane, int lane_width, double end_path_s, double car_s, double car_speed, bool front, bool rear);
+
+bool lane_occupancy(vector<vector<double>> sensor_fusion, int lane, double car_s, int lane_width);
 #endif  // HELPERS_H
