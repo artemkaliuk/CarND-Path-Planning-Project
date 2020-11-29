@@ -21,124 +21,24 @@ In this project the goal is to safely navigate around a virtual highway with oth
 Each waypoint in the list contains  [x,y,s,dx,dy] values. x and y are the waypoint's map coordinate position, the s value is the distance along the road to get to that waypoint in meters, the dx and dy values define the unit normal vector pointing outward of the highway loop.
 
 The highway's waypoints loop around so the frenet s value, distance along the road, goes from 0 to 6945.554.
+ 
 
+## Code Description
 
-Interface description
+The code is organized as follows: the main.cpp file implements the behavior planning logic and path planning, while planner.cpp implements scene understanding based on the inputs from the sensor data fusion. Within the planner.cpp, following concepts are implemented:
+1. For a given lane, front objects from the sensor data fusion are assigned to this lane (planner.cpp lines 23 to 34. After this, the closest vehicle is selected a target and returned as a Lane class member. It can then be accessed within the main.cpp file by calling the members of the corresponding class instance (egoLane, neighb1Lane or neighb2Lane). 
+2. A similar logic for extraction of the closest rear vehicle is implemented through the member function Lane::rear_traffic_check (from line 65).
 
-#### Main car's localization Data (No Noise)
+For the current ego lane, our vehicle tracks the front target vehicle and, if the latter drives so slow that the safe distance to the ego vehicle is violated, checks for the occupancy of the neighboring lanes while initiating own deceleration (main.cpp lines 204 to 240). If any particular lane is free, that means, the distance to the potential target and rear vehicle in this lane is safe, ego vehicle will initiate a lane change by manipulating the value of the *lane* variable (setting it to the value of the target lane). This value will be passed into the path planing section.
 
-["x"] The car's x position in map coordinates
+If the target vehicle is far enough, ego vehicle starts acceleration in order to achieve the maximum allowed speed.
 
-["y"] The car's y position in map coordinates
+Additionally, a check for cut-ins is implemented (main.cpp lines 167 to 199). As vehicles from neighboring lanes might also change lanes (and sometimes do so in quite an aggressive manner), the ego vehicle should foresee such situation and react by applying deceleration in order to avoid the collision with the cut-in vehicle. The check implementation is rule-based - a possible improvement would be an advanced tracker or a learned model based on a larger data set (e.g., lateral speed and position for the vehicles on the neighboring lanes vs. labels like "0" for "no cut-in" or "1" for "cut-in").
 
-["s"] The car's s position in frenet coordinates
+The trajectory planning part is implemented in main.cpp in lines 264 to 352.
+The algorithm uses prediction of the trajectory points based on the path from the earlier cycle (starting from line 277 in main.cpp). Furthermore, we define anchor points based on the map data (map_waypoints, see lines 293-295) for a lookahead path coordinate extraction. Please note that lines 293-295 also consist of the interface to the lane change (variable *lane* is propagated to the function *getXY* and offsets the trajectory to the neighboring lane if the value of the *lane* variable changes and thus assumes a lane change). We also rotate the resulting coordinates based on the vehicle orientation in the current frame. We employ the spline class in order to introduce a smoothly interpolated representation of the trajectory points (line 316). Spacing of the trajectory points is defined based on the current set velocity (line 335). The X-coordinate is then defined by an iterative increase of the spacing compared to the previous point, the Y-coordinate is found with the help of the *spline* class by using the X-coordinates as input (line 337). After rotating the trajectory points to the original coordinate system, we pass the calculated trajectory to the communication socket (lines 354-355).
 
-["d"] The car's d position in frenet coordinates
-
-["yaw"] The car's yaw angle in the map
-
-["speed"] The car's speed in MPH
-
-#### Previous path data given to the Planner
-
-//Note: Return the previous list but with processed points removed, can be a nice tool to show how far along
-the path has processed since last time. 
-
-["previous_path_x"] The previous list of x points previously given to the simulator
-
-["previous_path_y"] The previous list of y points previously given to the simulator
-
-#### Previous path's end s and d values 
-
-["end_path_s"] The previous list's last point's frenet s value
-
-["end_path_d"] The previous list's last point's frenet d value
-
-#### Sensor Fusion Data, a list of all other car's attributes on the same side of the road. (No Noise)
-
-["sensor_fusion"] A 2d vector of cars and then that car's [car's unique ID, car's x position in map coordinates, car's y position in map coordinates, car's x velocity in m/s, car's y velocity in m/s, car's s position in frenet coordinates, car's d position in frenet coordinates. 
-
-## Details
-
-1. The car uses a perfect controller and will visit every (x,y) point it recieves in the list every .02 seconds. The units for the (x,y) points are in meters and the spacing of the points determines the speed of the car. The vector going from a point to the next point in the list dictates the angle of the car. Acceleration both in the tangential and normal directions is measured along with the jerk, the rate of change of total Acceleration. The (x,y) point paths that the planner recieves should not have a total acceleration that goes over 10 m/s^2, also the jerk should not go over 50 m/s^3. (NOTE: As this is BETA, these requirements might change. Also currently jerk is over a .02 second interval, it would probably be better to average total acceleration over 1 second and measure jerk from that.
-
-2. There will be some latency between the simulator running and the path planner returning a path, with optimized code usually its not very long maybe just 1-3 time steps. During this delay the simulator will continue using points that it was last given, because of this its a good idea to store the last points you have used so you can have a smooth transition. previous_path_x, and previous_path_y can be helpful for this transition since they show the last points given to the simulator controller with the processed points already removed. You would either return a path that extends this previous path or make sure to create a new path that has a smooth transition with this last path.
-
-## Tips
-
-A really helpful resource for doing this project and creating smooth trajectories was using http://kluge.in-chemnitz.de/opensource/spline/, the spline function is in a single hearder file is really easy to use.
-
----
-
-## Dependencies
-
-* cmake >= 3.5
-  * All OSes: [click here for installation instructions](https://cmake.org/install/)
-* make >= 4.1
-  * Linux: make is installed by default on most Linux distros
-  * Mac: [install Xcode command line tools to get make](https://developer.apple.com/xcode/features/)
-  * Windows: [Click here for installation instructions](http://gnuwin32.sourceforge.net/packages/make.htm)
-* gcc/g++ >= 5.4
-  * Linux: gcc / g++ is installed by default on most Linux distros
-  * Mac: same deal as make - [install Xcode command line tools]((https://developer.apple.com/xcode/features/)
-  * Windows: recommend using [MinGW](http://www.mingw.org/)
-* [uWebSockets](https://github.com/uWebSockets/uWebSockets)
-  * Run either `install-mac.sh` or `install-ubuntu.sh`.
-  * If you install from source, checkout to commit `e94b6e1`, i.e.
-    ```
-    git clone https://github.com/uWebSockets/uWebSockets 
-    cd uWebSockets
-    git checkout e94b6e1
-    ```
-
-## Editor Settings
-
-We've purposefully kept editor configuration files out of this repo in order to
-keep it as simple and environment agnostic as possible. However, we recommend
-using the following settings:
-
-* indent using spaces
-* set tab width to 2 spaces (keeps the matrices in source code aligned)
-
-## Code Style
-
-Please (do your best to) stick to [Google's C++ style guide](https://google.github.io/styleguide/cppguide.html).
-
-## Project Instructions and Rubric
-
-Note: regardless of the changes you make, your project must be buildable using
-cmake and make!
-
-
-## Call for IDE Profiles Pull Requests
-
-Help your fellow students!
-
-We decided to create Makefiles with cmake to keep this project as platform
-agnostic as possible. Similarly, we omitted IDE profiles in order to ensure
-that students don't feel pressured to use one IDE or another.
-
-However! I'd love to help people get up and running with their IDEs of choice.
-If you've created a profile for an IDE that you think other students would
-appreciate, we'd love to have you add the requisite profile files and
-instructions to ide_profiles/. For example if you wanted to add a VS Code
-profile, you'd add:
-
-* /ide_profiles/vscode/.vscode
-* /ide_profiles/vscode/README.md
-
-The README should explain what the profile does, how to take advantage of it,
-and how to install it.
-
-Frankly, I've never been involved in a project with multiple IDE profiles
-before. I believe the best way to handle this would be to keep them out of the
-repo root to avoid clutter. My expectation is that most profiles will include
-instructions to copy files to a new location to get picked up by the IDE, but
-that's just a guess.
-
-One last note here: regardless of the IDE used, every submitted project must
-still be compilable with cmake and make./
-
-## How to write a README
-A well written README file can enhance your project and portfolio.  Develop your abilities to create professional README files by completing [this free course](https://www.udacity.com/course/writing-readmes--ud777).
-
+Further improvements can be implemeted:
+* longitudinal control - set speed can be set into relation to the speed of the target vehicle
+* strategic lane change - defined by analyzing the average speed in the candidate lanes and deciding to take on the lane that will minimize the delay
+* aggressive driving - accelerating and decelerating while violating the defined safety distance in order to enable an aggressive lane change (in order to switch to the neighboring lane if the traffic there is faster than in the ego lane) even by violating the defined safe distances to the front and rear vehicles. Here safety mechanisms shall still be taken into account, e.g. by calculating the minimum viable safety distance based on the velocities of the front and rear vehicles and taken into account the reaction capabilities of the ego vehicle.

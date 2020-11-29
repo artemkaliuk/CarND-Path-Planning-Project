@@ -155,17 +155,14 @@ int main() {
 							lane_neighb2 = 0.0;
 						}
 					}
-					// find the target vehicle
+					// fAnalyze the (potential) target vehicles for each of the lanes
 					Lane egoLane = Lane(lane, lane_width, car_s, car_d, car_speed, max_vel, sensor_fusion);
 					Lane neighb1Lane = Lane(lane_neighb1, lane_width, car_s, car_d, car_speed, max_vel, sensor_fusion);
 					Lane neighb2Lane = Lane(lane_neighb2, lane_width, car_s, car_d, car_speed, max_vel, sensor_fusion);
 
 					// Check for the possible cut-ins from the neighboring lane
 					// identify the lane configuration (how many neighboring lanes are there
-					// If there is a potential cut-in situation, assign the attributes of the cut-in vehicle
-					// as
-					//std::cout << "Left lane d: " <<  (car_d - neighb1Lane.target_d - veh_width) << std::endl;
-					//std::cout << "Right lane d: " << (car_d - neighb2Lane.target_d - veh_width) << std::endl;
+					// If there is a potential cut-in situation, represent the classified cut-in vehicle as a target vehicle in the ego-lane
 
 					if ((braking != true) && (lane_change != true)){
 						if (lane == 1.0){
@@ -203,11 +200,11 @@ int main() {
 
 
 					if (lane_change != true){ // if no lane change has been triggered in the prev. cycle
-						std::cout << "No lane change requested " << std::endl;
+						//std::cout << "No lane change requested " << std::endl;
 						if ((safe_dist > egoLane.target_s) || ((safe_dist + 5 > egoLane.target_s) && (egoLane.target_delta_v > max_acc_mphps_cycle))){
 							set_vel -= max_acc_mphps_cycle;
 							braking = true;
-							std::cout << "Decelerating!" << std::endl;
+							//std::cout << "Decelerating!" << std::endl;
 							// check for a possibility of a lane change
 							if (lane == 0.0){ // ego on the leftmost lane, only neighbor lane is to the middle one
 								if ((neighb1Lane.rear_traffic_dist < dist2rear_traffic) && (neighb1Lane.target_s > safe_dist + 10.0)){ // if distance to the front and rear vehicle is large enough, force lane change
@@ -217,27 +214,27 @@ int main() {
 								}
 							}
 							else if (lane == 1.0){
-								std::cout << "Checking lane change from the middle lane " << std::endl;
-								std::cout << "left lane rear traffic clear? " << (neighb1Lane.rear_traffic_dist < dist2rear_traffic) << std::endl;
-								std::cout << "left lane front traffic clear? " << (neighb1Lane.target_s > safe_dist + 10.0) << std::endl;
-								std::cout << "right lane rear traffic clear? " << (neighb2Lane.rear_traffic_dist < dist2rear_traffic) << std::endl;
-								std::cout << "right lane front traffic clear? " << (neighb2Lane.target_s > safe_dist + 10.0) << std::endl;
+								//std::cout << "Checking lane change from the middle lane " << std::endl;
+								//std::cout << "left lane rear traffic clear? " << (neighb1Lane.rear_traffic_dist < dist2rear_traffic) << std::endl;
+								//std::cout << "left lane front traffic clear? " << (neighb1Lane.target_s > safe_dist + 10.0) << std::endl;
+								//std::cout << "right lane rear traffic clear? " << (neighb2Lane.rear_traffic_dist < dist2rear_traffic) << std::endl;
+								//std::cout << "right lane front traffic clear? " << (neighb2Lane.target_s > safe_dist + 10.0) << std::endl;
 								if((neighb1Lane.rear_traffic_dist < dist2rear_traffic) && (neighb1Lane.target_s > safe_dist + 10.0)){
 									lane -= 1.0;
 									lane_change = true;
-									std::cout << "target lane: LEFT " << std::endl;
+									//std::cout << "target lane: LEFT " << std::endl;
 								}
 								else if ((neighb2Lane.rear_traffic_dist < dist2rear_traffic) && (neighb2Lane.target_s > safe_dist + 10.0)){
 									lane += 1.0;
 									lane_change = true;
-									std::cout << "target lane: RIGHT " << std::endl;
+									//std::cout << "target lane: RIGHT " << std::endl;
 								}
 							}
 							else if (lane == 2.0){
 								if ((neighb1Lane.rear_traffic_dist < dist2rear_traffic) && (neighb1Lane.target_s > safe_dist + 10.0)){
 									lane -= 1.0;
 									lane_change = true;
-									std::cout << "target lane: MIDDLE " << std::endl;
+									//std::cout << "target lane: MIDDLE " << std::endl;
 								}
 							}
 						}
@@ -249,7 +246,7 @@ int main() {
 							}
 						}
 					}
-					std::cout << "target lane: " << lane << std::endl;
+					//std::cout << "target lane: " << lane << std::endl;
 
 
 					// check whether the lane change has been finished
@@ -258,66 +255,7 @@ int main() {
 							lane_change = false;
 						}
 					}
-					std::cout << "lane change status: " << lane_change << std::endl;
-					//if (((safe_dist + 15) > egoLane.target_s) && (egoLane.target_delta_v > max_acc_cycle) && (set_vel > 5.0)){
-/*					if ((safe_dist > egoLane.target_s) || ((safe_dist + 5 > egoLane.target_s) && (egoLane.target_delta_v > max_acc_mphps_cycle))){
-						set_vel -= max_acc_mphps_cycle;
-						std::cout << "Decelerating!" << std::endl;
-						// check whether a lane change is already under way
-						if ((lane_change == true) && ((abs(car_d - lane * lane_width + 2.0)) >= 0.7)){
-							// if so, do not undertake any further actions
-							std::cout << "Distance to target lane center: " << (car_d - lane * lane_width + 2.0) << std::endl;
-						}
-						else{
-							// here we check for a potential lane change
-							if (lane == 0.0){ // ego on the leftmost lane, only neighbor lane is to the middle one
-								if ((neighb1Lane.rear_traffic_dist < dist2rear_traffic) && (neighb1Lane.target_s > safe_dist + 10.0)){ // if distance to the front and rear vehicle is large enough, force lane change
-									lane += 1.0;
-									lane_change = true;
-									std::cout << "target lane: MIDDLE " << std::endl;
-								}
-							}
-							else if (lane == 1.0){ // if ego vehicle in a middle lane
-								std::cout << "rear_traffic_dist left: " << neighb1Lane.rear_traffic_dist << std::endl;
-								std::cout << "front_traffic_dist left: " << neighb1Lane.target_s << std::endl;
-
-								std::cout << "rear_traffic_dist right: " << neighb2Lane.rear_traffic_dist << std::endl;
-								std::cout << "front_traffic_dist right: " << neighb2Lane.target_s << std::endl;
-								if ((neighb1Lane.rear_traffic_dist < dist2rear_traffic) && (neighb1Lane.target_s > safe_dist + 10.0)){// if distance to the front and rear vehicle is large enough, force lane change
-									lane -= 1.0;
-									lane_change = true;
-									std::cout << "target lane: LEFT " << std::endl;
-								}
-								else if ((neighb2Lane.rear_traffic_dist < dist2rear_traffic) && (neighb2Lane.target_s > safe_dist + 10.0)){
-									lane += 1.0;
-									lane_change = true;
-									std::cout << "target lane: RIGHT" << std::endl;
-								}
-							}
-							else{ // if ego vehicle in a right lane
-								if ((neighb1Lane.rear_traffic_dist < dist2rear_traffic) && (neighb1Lane.target_s > safe_dist + 10.0)){
-									lane -= 1.0;
-									lane_change = true;
-									std::cout << "target lane: MIDDLE" << std::endl;
-								}
-							}
-							//std::cout << "1 Target : " << egoLane.target_s << " Target delta: " << egoLane.target_delta_v << " max acc: " << max_acc_mphps_cycle << std::endl;
-							//std::cout << "Deceleration 1" << std::endl;
-						}
-					}
-					else {
-						//std::cout << "Acceleration!!!" << std::endl;
-						if (set_vel < (max_vel_mph - 0.5)){
-							set_vel += max_acc_mphps_cycle;
-							lane_change = false;
-						}
-					}
-					std::cout << "Target lane: " << lane << std::endl;
-
-					//std::cout << "Target id: " << egoLane.target_id << "Target dist: " << egoLane.target_s << " Delta v: " << egoLane.target_delta_v << " Set speed: " << set_vel << std::endl;
-
-*/
-
+					//std::cout << "lane change status: " << lane_change << std::endl;
 
 					/** DISCLAIMER: This part of the code was implemented based on the ideas of Udacity instructors from the Q&A video session (https://www.youtube.com/watch?v=7sI3VHFPP0w&feature=youtu.be)
 					 *
